@@ -6,30 +6,95 @@ import (
 	"net/http"
 )
 
+// ResponseConfig holds all settings to write a REST response
 type ResponseConfig struct {
 	statusCode int
 	headers    map[string]string
 	body       any
 }
 
+// ResponseOption defines how to set up a response
 type ResponseOption func(opts *ResponseConfig)
 
+// StatusCode sets the response HTTP status code
 func StatusCode(code int) ResponseOption {
 	return func(opts *ResponseConfig) {
 		opts.statusCode = code
 	}
 }
 
+// Header sets a header entry in the HTTP response
 func Header(key, value string) ResponseOption {
 	return func(opts *ResponseConfig) {
 		opts.headers[key] = value
 	}
 }
 
+// JSONBody sets the HTTP response body to be serialized as json
 func JSONBody(b any) ResponseOption {
 	return func(opts *ResponseConfig) {
 		opts.headers["Content-Type"] = "application/json; charset=utf-8"
 		opts.body = b
+	}
+}
+
+// ErrorResponse is the form used for API responses from failures in the API.
+type ErrorResponse struct {
+	Code         string `json:"code,omitempty"`
+	ErrorMessage string `json:"error,omitempty"`
+}
+
+func Error(err error) ResponseOption {
+	return func(opts *ResponseConfig) {
+		errRes, ok := opts.body.(ErrorResponse)
+		if !ok {
+			errRes = ErrorResponse{}
+		}
+
+		errRes.ErrorMessage = err.Error()
+
+		opts.body = errRes
+		opts.headers["Content-Type"] = "application/json; charset=utf-8"
+
+		if opts.statusCode >= 200 && opts.statusCode <= 399 {
+			opts.statusCode = http.StatusInternalServerError
+		}
+	}
+}
+
+func ErrorCode(errCode string) ResponseOption {
+	return func(opts *ResponseConfig) {
+		errRes, ok := opts.body.(ErrorResponse)
+		if !ok {
+			errRes = ErrorResponse{}
+		}
+
+		errRes.Code = errCode
+
+		opts.body = errRes
+		opts.headers["Content-Type"] = "application/json; charset=utf-8"
+
+		if opts.statusCode >= 200 && opts.statusCode <= 399 {
+			opts.statusCode = http.StatusInternalServerError
+		}
+	}
+}
+
+func ErrorMessage(msg string) ResponseOption {
+	return func(opts *ResponseConfig) {
+		errRes, ok := opts.body.(ErrorResponse)
+		if !ok {
+			errRes = ErrorResponse{}
+		}
+
+		errRes.ErrorMessage = msg
+
+		opts.body = errRes
+		opts.headers["Content-Type"] = "application/json; charset=utf-8"
+
+		if opts.statusCode >= 200 && opts.statusCode <= 399 {
+			opts.statusCode = http.StatusInternalServerError
+		}
 	}
 }
 
@@ -53,65 +118,14 @@ func Respond(w http.ResponseWriter, opts ...ResponseOption) {
 		w.Header().Set(k, v)
 	}
 
-	if responseConfig.body != nil {
-		encoder := json.NewEncoder(w)
-		if err := encoder.Encode(&responseConfig.body); err != nil {
-			log.Printf("failed to encode response body: %s\n", err)
-
-			return
-		}
-	}
-}
-
-type ResponseErrorConfig struct {
-	StatusCode int
-	ErrorCode  string
-	ErrorMsg   string
-}
-
-type ResponseErrorOption func(opts *ResponseErrorConfig)
-
-func ErrorStatusCode(code int) ResponseErrorOption {
-	return func(opts *ResponseErrorConfig) {
-		opts.StatusCode = code
-	}
-}
-
-func ErrorCode(code string) ResponseErrorOption {
-	return func(opts *ResponseErrorConfig) {
-		opts.ErrorCode = code
-	}
-}
-
-func ErrorStringMessage(msg string) ResponseErrorOption {
-	return func(opts *ResponseErrorConfig) {
-		opts.ErrorMsg = msg
-	}
-}
-
-func ErrorMessage(err error) ResponseErrorOption {
-	return func(opts *ResponseErrorConfig) {
-		opts.ErrorMsg = err.Error()
-	}
-}
-
-// ErrorResponse is the form used for API responses from failures in the API.
-type ErrorResponse struct {
-	Code  string `json:"code,omitempty"`
-	Error string `json:"error"`
-}
-
-// RespondError translate the error and write it back to the client.
-func RespondError(w http.ResponseWriter, opts ...ResponseErrorOption) {
-	responseConfig := ResponseErrorConfig{}
-	for _, responseOption := range opts {
-		responseOption(&responseConfig)
+	if responseConfig.body == nil {
+		return
 	}
 
-	er := ErrorResponse{
-		Code:  responseConfig.ErrorCode,
-		Error: responseConfig.ErrorMsg,
-	}
+	encoder := json.NewEncoder(w)
+	if err := encoder.Encode(&responseConfig.body); err != nil {
+		log.Printf("failed to encode response body: %s\n", err)
 
-	Respond(w, StatusCode(responseConfig.StatusCode), JSONBody(er))
+		return
+	}
 }
