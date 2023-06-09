@@ -12,8 +12,27 @@ go get github.com/caiorcferreira/restencoder
 
 ## Usage
 
-### Examples
+### Success response
+```go
+restencoder.Respond(
+    w,
+    StatusCode(http.StatusCreated),
+    Header("X-Header", "value"),
+    JSONBody(body),
+)
+```
 
+### Failure response
+```go
+restencoder.Respond(
+    w,
+    StatusCode(http.StatusBadRequest),
+    Header("X-Header", "value"),
+    Error(err),
+)
+```
+
+If you want a different failure response schema, you could implement your own `restencoder.ResponseOption` to define `ResponseConfig.JSONBody` to your failure response struct.
 
 ## Contributing
 Every help is always welcome. Feel free do throw us a pull request, we'll do our best to check it out as soon as possible. But before that, let us establish some guidelines:
